@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
+    <title>Inbox</title>
+    <style>
+        :root {
+            --primary: #0084ff;
+            --primary-dark: #006bcf;
+            --danger: #ff3b30;
+            --bg: #f0f2f5;
+            --surface: #ffffff;
+            --bubble-me: #0084ff;
+            --bubble-them: #e4e6eb;
+            --text-main: #050505;
+            --text-sub: #65676b;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            margin: 0;
+            padding: 0;
+            /* CRITICAL FIX: Use dvh (dynamic viewport height) for mobile browsers */
+            height: 100vh; 
+            height: 100dvh; 
+            width: 100vw;
+            display: flex;
+            justify-content: center;
+            overflow: hidden; 
+        }
+
+        /* --- Global Components --- */
+        .btn {
+            background: var(--primary); color: white; border: none;
+            padding: 10px 20px; border-radius: 8px; cursor: pointer;
+            font-size: 15px; font-weight: 600; transition: background 0.2s;
+        }
+        .btn:hover { background: var(--primary-dark); }
+        .btn:disabled { background: #ccc; cursor: not-allowed; }
+        .btn-danger { background: var(--danger); }
+        .btn-secondary { background: #e4e6eb; color: black; }
+
+        .icon-btn {
+            background: none; border: none; cursor: pointer; color: var(--primary);
+            padding: 8px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+        }
+        .icon-btn:hover { background: rgba(0,0,0,0.05); }
+        .icon-btn svg { width: 24px; height: 24px; fill: currentColor; }
+
+        input[type="text"], input[type="password"] {
+            width: 100%; padding: 12px; margin: 8px 0;
+            border: 1px solid #ddd; border-radius: 8px; font-size: 16px; outline: none;
+        }
+        input:focus { border-color: var(--primary); }
+
+        /* --- Modals --- */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+            z-index: 2000; display: flex; justify-content: center; align-items: center;
+        }
+        .modal-box {
+            background: white; padding: 2rem; border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            width: 90%; max-width: 320px; text-align: center;
+        }
+        .hidden { display: none !important; }
+
+        /* --- Main App Container --- */
+        #app-container {
+            width: 100%; max-width: 480px; 
+            height: 100%; 
+            background: var(--surface);
+            display: none; /* Hidden until login */
+            flex-direction: column;
+            position: relative;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        /* --- Header --- */
+        header {
+            padding: 0 15px; height: 60px;
+            border-bottom: 1px solid #e4e6eb;
+            display: flex; justify-content: space-between; align-items: center;
+            background: white; z-index: 10; flex-shrink: 0;
+        }
+        h2 { font-size: 18px; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        /* --- Inbox --- */
+        #inbox-view {
+            flex: 1; overflow-y: auto; display: flex; flex-direction: column;
+            -webkit-overflow-scrolling: touch;
+        }
+        .thread-item {
+            padding: 12px 15px; display: flex; align-items: center;
+            cursor: pointer; border-bottom: 1px solid #f0f0f0;
+        }
+        .thread-item:hover { background: #f7f8fa; }
+        .avatar-circle {
+            width: 45px; height: 45px; background: #e4e6eb; color: #555;
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            font-weight: bold; font-size: 18px; margin-right: 12px; flex-shrink: 0;
+        }
+        .thread-info { flex: 1; overflow: hidden; }
+        .thread-name { font-weight: 600; font-size: 16px; color: var(--text-main); }
+        .thread-preview { font-size: 13px; color: var(--text-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .badge {
+            background: var(--danger); color: white; font-size: 11px; padding: 2px 8px;
+            border-radius: 12px; margin-left: auto;
+        }
+        .select-checkbox { margin-right: 15px; transform: scale(1.3); display: none; }
+
+        /* --- Chat View --- */
+        #chat-view {
+            flex: 1; 
+            display: none; 
+            flex-direction: column; 
+            height: 100%;
+            background: white; 
+            position: relative;
+            overflow: hidden; /* Contains children */
+        }
+        
+        #messages-list {
+            flex: 1; 
+            padding: 15px; 
+            overflow-y: auto;
+            display: flex; 
+            flex-direction: column; 
+            gap: 8px;
+            background: #fff; 
+            position: relative;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        /* Empty State Prompt */
+        #empty-state-prompt {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #888;
+            display: none; 
+            flex-direction: column;
+            align-items: center;
+            width: 80%;
+            pointer-events: none; /* Let clicks pass through */
+        }
+        #empty-state-prompt svg { width: 60px; height: 60px; margin-bottom: 10px; fill: #ddd; }
+
+        .message {
+            max-width: 75%; padding: 10px 14px;
+            border-radius: 18px; font-size: 15px;
+            position: relative; word-wrap: break-word; line-height: 1.4;
+        }
+        .message.me {
+            align-self: flex-end; background-color: var(--bubble-me); color: white;
+            border-bottom-right-radius: 4px;
+        }
+        .message.them {
+            align-self: flex-start; background-color: var(--bubble-them); color: black;
+            border-bottom-left-radius: 4px;
+        }
+        .message img, .message video { max-width: 100%; border-radius: 12px; display: block; margin-top: 5px; }
+        .sender-label { font-size: 11px; color: #888; margin-bottom: 2px; margin-left: 10px; }
+
+        /* --- Footer / Input --- */
+        #input-area {
+            border-top: 1px solid #e4e6eb; 
+            background: white; 
+            padding: 10px;
+            flex-shrink: 0; /* Never shrink */
+            padding-bottom: env(safe-area-inset-bottom, 10px); /* iPhone X+ safety */
+            z-index: 20;
+        }
+        .input-row { display: flex; align-items: center; gap: 10px; }
+        #message-input {
+            flex: 1; padding: 10px 15px; border-radius: 20px; border: 1px solid #ddd;
+            background: #f0f2f5; outline: none;
+        }
+        #sandbox-preview {
+            padding: 8px; background: #f0f0f0; border-radius: 8px;
+            margin-bottom: 8px; display: none; position: relative;
+        }
+        #sandbox-preview img, #sandbox-preview video { max-height: 80px; border-radius: 4px; }
+        .remove-media {
+            position: absolute; top: -5px; right: -5px;
+            background: #333; color: white; border-radius: 50%;
+            width: 20px; height: 20px; text-align: center; line-height: 20px;
+            cursor: pointer; font-size: 12px;
+        }
+
+        /* --- Alerts/Notices --- */
+        #blocked-notice {
+            background: #fff5f5; color: var(--danger);
+            text-align: center; padding: 15px; font-weight: 500;
+            display: none; border-top: 1px solid #ffe0e0;
+        }
+        #merge-controls {
+            padding: 10px 15px; background: #e7f3ff;
+            display: none; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid #d0e5ff;
+        }
+        
+        .chat-actions { display: flex; gap: 8px; }
+        .btn-mini { padding: 6px 12px; font-size: 12px; border-radius: 6px; border: none; cursor: pointer; color: white; }
+    </style>
+</head>
+<body>
+
+    <div id="auth-modal" class="modal-overlay">
+        <div class="modal-box">
+            <h2 style="margin-bottom: 15px;">Inbox Login</h2>
+            <input type="text" id="login-name" placeholder="Enter your Name" autocomplete="off" />
+            <input type="password" id="login-pin" placeholder="4-Digit PIN" maxlength="4" pattern="\d*" inputmode="numeric" />
+            <button class="btn" id="login-btn" style="width:100%; margin-top: 10px;">Enter</button>
+            <p id="login-error" style="color:var(--danger); font-size:13px; margin-top:10px;"></p>
+        </div>
+    </div>
+
+    <div id="new-chat-modal" class="modal-overlay hidden">
+        <div class="modal-box">
+            <h3>Start New Chat</h3>
+            <p style="color:#666; font-size:14px;">Enter the exact username of the person you want to message.</p>
+            <input type="text" id="new-chat-name" placeholder="Username (e.g. John)" />
+            <div style="display:flex; gap:10px; margin-top:15px;">
+                <button class="btn btn-secondary" id="cancel-chat-btn" style="flex:1;">Cancel</button>
+                <button class="btn" id="confirm-chat-btn" style="flex:1;">Chat</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="app-container">
+        
+        <header id="main-header">
+            <div id="header-left" style="display:flex; align-items:center; flex:1; overflow:hidden;">
+                <button class="icon-btn hidden" id="back-btn" style="margin-right: 5px;">
+                    <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+                </button>
+                <h2 id="header-title">Inbox</h2>
+            </div>
+            <div id="header-right">
+                <span id="inbox-actions" style="display:flex; align-items:center;">
+                    <button class="icon-btn" id="toggle-select-mode" title="Merge Threads">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
+                        </svg>
+                    </button>
+                    <button class="icon-btn" id="open-new-chat-btn" title="New Chat" style="margin-left:5px;">
+                        <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                    </button>
+                </span>
+                <span id="chat-actions" class="hidden chat-actions">
+                    <button id="block-btn" class="btn-mini" style="background:#888;">Block</button>
+                    <button id="delete-btn" class="btn-mini btn-danger">Delete</button>
+                </span>
+            </div>
+        </header>
+
+        <div id="merge-controls">
+            <span style="font-size:14px; color:var(--primary);">Select threads to merge</span>
+            <button class="btn" id="confirm-merge-btn" style="padding: 5px 15px; font-size:13px;">Merge Selected</button>
+        </div>
+
+        <div id="inbox-view"></div>
+
+        <div id="chat-view">
+            <div id="messages-list">
+                <div id="empty-state-prompt">
+                    <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+                    <div>Start a conversation</div>
+                    <div style="font-size:12px; margin-top:5px;">Say hello!</div>
+                </div>
+            </div>
+            
+            <div id="blocked-notice">This conversation is blocked.</div>
+
+            <div id="input-area">
+                <div id="sandbox-preview">
+                    <div class="remove-media" id="clear-media">×</div>
+                    <div id="media-container"></div>
+                </div>
+
+                <div class="input-row">
+                    <input type="file" id="media-input" accept="image/*,video/*" style="display: none;" />
+                    <button class="icon-btn" id="attach-btn" title="Attach Media">
+                        <svg viewBox="0 0 24 24" style="transform: rotate(45deg);"><path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5a2.5 2.5 0 0 1 5 0v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5a2.5 2.5 0 0 0 5 0V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/></svg>
+                    </button>
+                    <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off"/>
+                    <button class="icon-btn" id="send-btn" style="color:var(--primary);" title="Send">
+                        <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <audio id="notif-sound" src="DING.mp3" preload="auto"></audio>
+    
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-app.js";
+        import { getFirestore, collection, addDoc, query, where, onSnapshot, doc, getDoc, setDoc, deleteDoc, updateDoc, serverTimestamp, orderBy, getDocs } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-firestore.js";
+        import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-storage.js";
+
+        // --- FIREBASE CONFIG ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyBsIfcS2kY29alWNQBqaLwQ9To4LwlcRD8",
+            authDomain: "myinbox-f9937.firebaseapp.com",
+            projectId: "myinbox-f9937",
+            storageBucket: "myinbox-f9937.firebasestorage.app",
+            messagingSenderId: "906002940697",
+            appId: "1:906002940697:web:6bea44f2927a6a8df23b88",
+            measurementId: "G-VKN6E7XTF8"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const storage = getStorage(app);
+
+        // --- STATE VARIABLES ---
+        let currentUser = null;
+        let currentChatId = null;
+        let selectedFile = null;
+        let isSelectMode = false;
+        let unsubscribeMessages = null;
+        let unsubscribeThreadMeta = null;
+
+        // --- DOM REFERENCES ---
+        // Auth
+        const authModal = document.getElementById('auth-modal');
+        const loginBtn = document.getElementById('login-btn');
+        const loginName = document.getElementById('login-name');
+        const loginPin = document.getElementById('login-pin');
+        const loginError = document.getElementById('login-error');
+
+        // Main UI
+        const appContainer = document.getElementById('app-container');
+        const inboxView = document.getElementById('inbox-view');
+        const chatView = document.getElementById('chat-view');
+        const headerTitle = document.getElementById('header-title');
+        const backBtn = document.getElementById('back-btn');
+        const inboxActions = document.getElementById('inbox-actions');
+        const chatActions = document.getElementById('chat-actions');
+        const emptyStatePrompt = document.getElementById('empty-state-prompt');
+
+        // New Chat Modal
+        const newChatModal = document.getElementById('new-chat-modal');
+        const openNewChatBtn = document.getElementById('open-new-chat-btn');
+        const cancelChatBtn = document.getElementById('cancel-chat-btn');
+        const confirmChatBtn = document.getElementById('confirm-chat-btn');
+        const newChatNameInput = document.getElementById('new-chat-name');
+
+        // Merge
+        const toggleSelectBtn = document.getElementById('toggle-select-mode');
+        const mergeControls = document.getElementById('merge-controls');
+        const confirmMergeBtn = document.getElementById('confirm-merge-btn');
+
+        // Chat Interface
+        const messagesList = document.getElementById('messages-list');
+        const messageInput = document.getElementById('message-input');
+        const sendBtn = document.getElementById('send-btn');
+        const blockBtn = document.getElementById('block-btn');
+        const deleteBtn = document.getElementById('delete-btn');
+        const blockedNotice = document.getElementById('blocked-notice');
+        const inputArea = document.getElementById('input-area');
+        
+        // Media
+        const attachBtn = document.getElementById('attach-btn');
+        const mediaInput = document.getElementById('media-input');
+        const sandboxPreview = document.getElementById('sandbox-preview');
+        const mediaContainer = document.getElementById('media-container');
+        const clearMediaBtn = document.getElementById('clear-media');
+
+        // --- AUTHENTICATION ---
+        loginBtn.addEventListener('click', handleLogin);
+        loginPin.addEventListener('keypress', (e) => { if(e.key === 'Enter') handleLogin(); });
+
+        async function handleLogin() {
+            const name = loginName.value.trim();
+            const pin = loginPin.value.trim();
+
+            if (!name || pin.length !== 4) {
+                loginError.textContent = "Please enter name and 4-digit PIN.";
+                return;
+            }
+
+            loginBtn.textContent = "Loading...";
+            loginBtn.disabled = true;
+
+            const userId = name.toLowerCase().replace(/\s+/g, '-');
+            const userDocRef = doc(db, "users", userId);
+
+            try {
+                const userSnap = await getDoc(userDocRef);
+                if (userSnap.exists()) {
+                    if (userSnap.data().pin === pin) {
+                        currentUser = { id: userId, ...userSnap.data() };
+                        enterApp();
+                    } else {
+                        loginError.textContent = "Incorrect PIN.";
+                        loginBtn.textContent = "Enter";
+                        loginBtn.disabled = false;
+                    }
+                } else {
+                    const newUser = { name: name, pin: pin, createdAt: serverTimestamp() };
+                    await setDoc(userDocRef, newUser);
+                    currentUser = { id: userId, ...newUser };
+                    enterApp();
+                }
+            } catch (err) {
+                console.error(err);
+                loginError.textContent = "Connection failed.";
+                loginBtn.textContent = "Enter";
+                loginBtn.disabled = false;
+            }
+        }
+
+        function enterApp() {
+            authModal.style.display = 'none';
+            appContainer.style.display = 'flex';
+            loadInbox();
+        }
+
+        // --- INBOX LOGIC ---
+        function loadInbox() {
+            const threadsRef = collection(db, "threads");
+            // FIXED QUERY: Removed orderBy to avoid missing Index error
+            const q = query(threadsRef, where("participants", "array-contains", currentUser.name));
+
+            onSnapshot(q, (snapshot) => {
+                inboxView.innerHTML = '';
+                if (snapshot.empty) {
+                    inboxView.innerHTML = '<div style="text-align:center; padding:40px; color:#aaa; font-size:14px;">No messages yet.<br>Tap + to start.</div>';
+                    return;
+                }
+
+                // SORTING IN JS instead of Firestore to prevent Index Errors
+                let threads = [];
+                snapshot.forEach(docSnap => {
+                    threads.push({ id: docSnap.id, data: docSnap.data() });
+                });
+
+                // Sort by lastUpdated descending (newest first)
+                threads.sort((a, b) => {
+                    const timeA = a.data.lastUpdated ? a.data.lastUpdated.seconds : 0;
+                    const timeB = b.data.lastUpdated ? b.data.lastUpdated.seconds : 0;
+                    return timeB - timeA;
+                });
+
+                threads.forEach(thread => {
+                    const data = thread.data;
+                    const threadId = thread.id;
+                    const otherParticipants = data.participants.filter(p => p !== currentUser.name);
+                    const chatName = otherParticipants.join(", ");
+                    const unreadCount = (data.unreadCounts && data.unreadCounts[currentUser.name]) || 0;
+                    
+                    const initials = chatName.substring(0, 1).toUpperCase();
+
+                    if (unreadCount > 0 && currentChatId !== threadId) {
+                        document.getElementById('notif-sound').play().catch(() => {});
+                    }
+
+                    const item = document.createElement('div');
+                    item.className = 'thread-item';
+                    item.innerHTML = `
+                        <input type="checkbox" class="select-checkbox ${isSelectMode ? 'block' : ''}" data-id="${threadId}" data-participants="${otherParticipants.join(',')}">
+                        <div class="avatar-circle">${initials}</div>
+                        <div class="thread-info">
+                            <div class="thread-name">${chatName}</div>
+                            <div class="thread-preview" style="${unreadCount > 0 ? 'font-weight:bold; color:black;' : ''}">
+                                ${data.lastMessage || 'Start conversation'}
+                            </div>
+                        </div>
+                        ${unreadCount > 0 ? `<div class="badge">${unreadCount}</div>` : ''}
+                    `;
+
+                    const checkbox = item.querySelector('.select-checkbox');
+                    
+                    if (isSelectMode) {
+                        checkbox.style.display = 'block';
+                        item.onclick = () => checkbox.checked = !checkbox.checked;
+                    } else {
+                        item.onclick = () => openThread(threadId, chatName);
+                    }
+
+                    inboxView.appendChild(item);
+                });
+            });
+        }
+
+        // --- NEW CHAT LOGIC ---
+        openNewChatBtn.addEventListener('click', () => {
+            newChatNameInput.value = '';
+            newChatModal.classList.remove('hidden');
+            newChatNameInput.focus();
+        });
+
+        cancelChatBtn.addEventListener('click', () => {
+            newChatModal.classList.add('hidden');
+        });
+
+        confirmChatBtn.addEventListener('click', createChat);
+        newChatNameInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') createChat(); });
+
+        async function createChat() {
+            const targetName = newChatNameInput.value.trim();
+            if (!targetName) return;
+            if (targetName.toLowerCase() === currentUser.name.toLowerCase()) {
+                alert("You cannot message yourself.");
+                return;
+            }
+
+            confirmChatBtn.textContent = "Checking...";
+            confirmChatBtn.disabled = true;
+
+            try {
+                // Check if chat exists (manually to avoid index issues)
+                const threadsRef = collection(db, "threads");
+                const q = query(threadsRef, where("participants", "array-contains", currentUser.name));
+                const snapshot = await getDocs(q);
+
+                let existingThreadId = null;
+
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    if (data.participants.length === 2 && data.participants.includes(targetName)) {
+                        existingThreadId = doc.id;
+                    }
+                });
+
+                newChatModal.classList.add('hidden');
+                confirmChatBtn.textContent = "Chat";
+                confirmChatBtn.disabled = false;
+
+                if (existingThreadId) {
+                    openThread(existingThreadId, targetName);
+                } else {
+                    const newDoc = await addDoc(collection(db, "threads"), {
+                        participants: [currentUser.name, targetName],
+                        lastMessage: "",
+                        lastUpdated: serverTimestamp(),
+                        unreadCounts: {}
+                    });
+                    openThread(newDoc.id, targetName);
+                }
+
+            } catch (err) {
+                console.error(err);
+                alert("Error creating chat.");
+                confirmChatBtn.disabled = false;
+            }
+        }
+
+        // --- MERGE LOGIC ---
+        toggleSelectBtn.addEventListener('click', () => {
+            isSelectMode = !isSelectMode;
+            mergeControls.style.display = isSelectMode ? 'flex' : 'none';
+            toggleSelectBtn.style.color = isSelectMode ? 'var(--danger)' : 'var(--primary)';
+            loadInbox();
+        });
+
+        confirmMergeBtn.addEventListener('click', async () => {
+            const checkboxes = document.querySelectorAll('.select-checkbox:checked');
+            if (checkboxes.length < 2) {
+                alert("Select at least 2 threads to merge.");
+                return;
+            }
+
+            const allParticipants = new Set([currentUser.name]);
+            checkboxes.forEach(box => {
+                const parts = box.dataset.participants.split(',');
+                parts.forEach(p => allParticipants.add(p));
+            });
+
+            const participantArray = Array.from(allParticipants);
+            
+            const newRef = await addDoc(collection(db, "threads"), {
+                participants: participantArray,
+                lastMessage: "Group Merge",
+                lastUpdated: serverTimestamp(),
+                unreadCounts: {}
+            });
+
+            isSelectMode = false;
+            mergeControls.style.display = 'none';
+            toggleSelectBtn.style.color = 'var(--primary)';
+            loadInbox();
+            openThread(newRef.id, participantArray.filter(p => p !== currentUser.name).join(", "));
+        });
+
+        
+        
+        
+        
+        
+        
+        // --- CHAT LOGIC ---
+        window.openThread = async (threadId, chatName) => {
+            currentChatId = threadId;
+            
+            inboxView.style.display = 'none';
+            chatView.style.display = 'flex';
+            
+            headerTitle.textContent = chatName;
+            backBtn.classList.remove('hidden');
+            inboxActions.style.display = 'none'; // Hide right icons
+            chatActions.classList.remove('hidden');
+            
+            blockedNotice.style.display = 'none';
+            inputArea.style.display = 'block';
+            blockBtn.textContent = "Block";
+            blockBtn.disabled = false;
+
+            const threadRef = doc(db, "threads", threadId);
+            updateDoc(threadRef, { [`unreadCounts.${currentUser.name}`]: 0 });
+
+            const msgsRef = collection(db, "threads", threadId, "messages");
+            const q = query(msgsRef, orderBy("timestamp", "asc"));
+
+            if (unsubscribeMessages) unsubscribeMessages();         
+                        // Track initial load so we don't play sound for history
+            let isFirstLoad = true;
+
+            unsubscribeMessages = onSnapshot(q, (snapshot) => {
+                // 1. Handle Sound for NEW messages
+                if (!isFirstLoad) {
+                    snapshot.docChanges().forEach((change) => {
+                        if (change.type === "added") {
+                            const newMsg = change.doc.data();
+                            // Only play if it's NOT me
+                            if (newMsg.sender !== currentUser.name) {
+                                document.getElementById('notif-sound').play().catch(() => {});
+                            }
+                        }
+                    });
+                }
+
+                // 2. Render Messages
+                const prompt = emptyStatePrompt;
+                messagesList.innerHTML = ''; 
+                messagesList.appendChild(prompt); 
+
+                if (snapshot.empty) {
+                    prompt.style.display = 'flex';
+                } else {
+                    prompt.style.display = 'none';
+                    snapshot.forEach(doc => renderMessage(doc.data()));
+                    scrollToBottom();
+                }
+
+                // Mark first load as complete
+                isFirstLoad = false;
+            });
+
+            if (unsubscribeThreadMeta) unsubscribeThreadMeta();
+            unsubscribeThreadMeta = onSnapshot(threadRef, (docSnap) => {
+                if (!docSnap.exists()) {
+                    alert("Thread was deleted.");
+                    backToInbox();
+                    return;
+                }
+                const data = docSnap.data();
+
+                if (data.blockedBy) {
+                    blockedNotice.style.display = 'block';
+                    inputArea.style.display = 'none';
+                    if (data.blockedBy === currentUser.id) {
+                        blockedNotice.textContent = "You blocked this chat.";
+                        blockBtn.textContent = "Unblock";
+                    } else {
+                        blockedNotice.textContent = "You have been blocked.";
+                        blockBtn.disabled = true;
+                    }
+                } else {
+                    blockedNotice.style.display = 'none';
+                    inputArea.style.display = 'block';
+                    blockBtn.textContent = "Block";
+                }
+            });
+        };
+
+        backBtn.addEventListener('click', backToInbox);
+
+        function backToInbox() {
+            currentChatId = null;
+            if (unsubscribeMessages) unsubscribeMessages();
+            if (unsubscribeThreadMeta) unsubscribeThreadMeta();
+
+            chatView.style.display = 'none';
+            inboxView.style.display = 'flex';
+            
+            headerTitle.textContent = "My Inbox";
+            backBtn.classList.add('hidden');
+            inboxActions.style.display = 'flex';
+            chatActions.classList.add('hidden');
+        }
+
+        function renderMessage(msg) {
+            const div = document.createElement('div');
+            const isMe = msg.sender === currentUser.name;
+            div.className = `message ${isMe ? 'me' : 'them'}`;
+            
+            let content = '';
+            if (!isMe) {
+                 content += `<div class="sender-label">${msg.sender}</div>`;
+            }
+
+            if (msg.mediaUrl) {
+                if (msg.mediaType && msg.mediaType.startsWith('video')) {
+                    content += `<video src="${msg.mediaUrl}" controls></video>`;
+                } else {
+                    content += `<img src="${msg.mediaUrl}" alt="media" />`;
+                }
+            }
+            if (msg.text) {
+                content += `<div>${msg.text}</div>`;
+            }
+
+            div.innerHTML = content;
+            messagesList.appendChild(div);
+        }
+
+        function scrollToBottom() {
+            messagesList.scrollTop = messagesList.scrollHeight;
+        }
+
+        // --- SENDING ---
+        attachBtn.addEventListener('click', () => mediaInput.click());
+
+        mediaInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            selectedFile = file;
+            sandboxPreview.style.display = 'block';
+            mediaContainer.innerHTML = '';
+            
+            const url = URL.createObjectURL(file);
+            if (file.type.startsWith('video')) {
+                const vid = document.createElement('video');
+                vid.src = url; vid.controls = true;
+                mediaContainer.appendChild(vid);
+            } else {
+                const img = document.createElement('img');
+                img.src = url;
+                mediaContainer.appendChild(img);
+            }
+        });
+
+        clearMediaBtn.addEventListener('click', () => {
+            selectedFile = null;
+            mediaInput.value = '';
+            sandboxPreview.style.display = 'none';
+            mediaContainer.innerHTML = '';
+        });
+
+        sendBtn.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', (e) => { if(e.key === 'Enter') sendMessage(); });
+
+        async function sendMessage() {
+            const text = messageInput.value.trim();
+            if (!text && !selectedFile) return;
+
+            messageInput.value = '';
+            const fileToSend = selectedFile;
+            clearMediaBtn.click();
+
+            let mediaUrl = null;
+            let mediaType = null;
+
+            try {
+                if (fileToSend) {
+                    mediaType = fileToSend.type;
+                    const storageRef = ref(storage, `chat-media/${Date.now()}_${fileToSend.name}`);
+                    const snapshot = await uploadBytes(storageRef, fileToSend);
+                    mediaUrl = await getDownloadURL(snapshot.ref);
+                }
+
+                const threadRef = doc(db, "threads", currentChatId);
+                const messagesRef = collection(threadRef, "messages");
+
+                await addDoc(messagesRef, {
+                    text: text,
+                    sender: currentUser.name,
+                    mediaUrl: mediaUrl,
+                    mediaType: mediaType,
+                    timestamp: serverTimestamp()
+                });
+
+                const threadSnap = await getDoc(threadRef);
+                if (threadSnap.exists()) {
+                    const participants = threadSnap.data().participants;
+                    let unreadUpdates = {};
+                    const currentCounts = threadSnap.data().unreadCounts || {};
+                    
+                    participants.forEach(p => {
+                        if (p !== currentUser.name) {
+                            unreadUpdates[`unreadCounts.${p}`] = (currentCounts[p] || 0) + 1;
+                        }
+                    });
+
+                    await updateDoc(threadRef, {
+                        lastMessage: text || (mediaType ? "Sent an attachment" : "Message"),
+                        lastUpdated: serverTimestamp(),
+                        ...unreadUpdates
+                    });
+                }
+            } catch (e) {
+                console.error("Send failed", e);
+                alert("Failed to send message.");
+            }
+        }
+
+        // --- BLOCK / DELETE ---
+        blockBtn.addEventListener('click', async () => {
+            if (!currentChatId) return;
+            const threadRef = doc(db, "threads", currentChatId);
+            const docSnap = await getDoc(threadRef);
+            if (!docSnap.exists()) return;
+
+            const isBlockedByMe = docSnap.data().blockedBy === currentUser.id;
+
+            if (isBlockedByMe) {
+                if(confirm("Unblock this user?")) await updateDoc(threadRef, { blockedBy: null });
+            } else {
+                if(confirm("Block this user? You won't receive messages.")) await updateDoc(threadRef, { blockedBy: currentUser.id });
+            }
+        });
+
+        deleteBtn.addEventListener('click', async () => {
+            if (confirm("Delete this conversation permanently for EVERYONE?")) {
+                await deleteDoc(doc(db, "threads", currentChatId));
+            }
+        });
+
+    </script>
+</body>
+</html>
+
+
+
