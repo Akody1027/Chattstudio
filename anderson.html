@@ -101,11 +101,27 @@
             const offerCandidates = callDoc.collection('offerCandidates');
             const answerCandidates = callDoc.collection('answerCandidates');
 
-            pc.onicecandidate = (e) => e.candidate && (isCaller ? offerCandidates : answerCandidates).add(e.candidate.toJSON());
+
+
+
+
+
+
 
             const doc = await callDoc.get();
             const isCaller = !doc.exists || !doc.data().offer;
 
+            pc.onicecandidate = (event) => {
+                if (event.candidate) {
+                    const targetCollection = isCaller ? offerCandidates : answerCandidates;
+                    targetCollection.add(event.candidate.toJSON());
+                }
+            };
+
+
+
+
+            
             if (isCaller) {
                 const offerDescription = await pc.createOffer();
                 await pc.setLocalDescription(offerDescription);
