@@ -3,24 +3,48 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Family Support Cam</title>
+    <title>Family Support Pro</title>
     <style>
-        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; text-align: center; }
-        .video-container { display: grid; grid-template-rows: 1fr 1fr; height: 85vh; gap: 5px; padding: 5px; }
-        video { width: 100%; height: 100%; background: #222; border-radius: 10px; object-fit: cover; }
-        .btns { height: 15vh; display: flex; justify-content: center; align-items: center; gap: 20px; }
-        button { padding: 20px 40px; font-size: 1.2rem; border-radius: 50px; border: none; cursor: pointer; }
-        #hangup { background: #ea4335; color: white; }
+        :root { --bg: #121212; --accent: #4285f4; --danger: #ea4335; }
+        body { margin: 0; background: var(--bg); color: white; font-family: sans-serif; overflow: hidden; }
+        
+        /* Main Container for Full Screen Video */
+        #video-viewport { position: relative; width: 100vw; height: 85vh; background: #000; }
+        
+        /* The Remote Video (The person you are helping) - Large View */
+        #remoteVideo { width: 100%; height: 100%; object-fit: cover; }
+        
+        /* The Local Video (You) - Small Picture-in-Picture */
+        #localVideo { 
+            position: absolute; bottom: 20px; right: 20px; 
+            width: 120px; height: 160px; 
+            background: #222; border: 2px solid white; border-radius: 12px; 
+            object-fit: cover; z-index: 10; cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+
+        .controls { 
+            height: 15vh; display: flex; justify-content: center; 
+            align-items: center; gap: 20px; background: #1a1a1a; 
+        }
+
+        button { 
+            padding: 18px 35px; font-size: 1rem; font-weight: bold; 
+            border-radius: 50px; border: none; cursor: pointer; 
+        }
+        #startBtn { background: var(--accent); color: white; }
+        #hangup { background: var(--danger); color: white; display: none; }
     </style>
 </head>
 <body>
 
-    <div class="video-container">
+    <div id="video-viewport">
         <video id="remoteVideo" autoplay playsinline></video>
-        <video id="localVideo" autoplay playsinline muted></video>
+        <video id="localVideo" autoplay playsinline muted title="Click to swap views"></video>
     </div>
 
-    <div class="btns">
+    <div class="controls">
+        <button id="startBtn">Start Call</button>
         <button id="hangup" onclick="location.reload()">End Call</button>
     </div>
 
@@ -28,7 +52,6 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
     <script>
-        // CONFIG FROM 1000065100.jpg
         const firebaseConfig = {
             apiKey: "AIzaSyAr8LM3SK09J-44-aQHCOT1mC_ma5ALGT0",
             authDomain: "realcall-dbffb.firebaseapp.com",
@@ -40,15 +63,25 @@
 
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
-        const pc = new RTCPeerConnection({
-            iceServers: [{ urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] }]
-        });
-
-        // FIXED ROOM NAME - This makes the URL stay the same!
         const ROOM_ID = "GrandparentsSupportRoom"; 
+        let pc;
 
-        async function start() {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const startBtn = document.getElementById('startBtn');
+        const hangupBtn = document.getElementById('hangup');
+
+        async function initCall() {
+            startBtn.style.display = 'none';
+            hangupBtn.style.display = 'block';
+
+            pc = new RTCPeerConnection({
+                iceServers: [{ urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] }]
+            });
+
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { width: 640, height: 480, frameRate: 15 }, 
+                audio: true 
+            });
+            
             document.getElementById('localVideo').srcObject = stream;
             stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
@@ -60,26 +93,20 @@
             const offerCandidates = callDoc.collection('offerCandidates');
             const answerCandidates = callDoc.collection('answerCandidates');
 
-            pc.onicecandidate = (event) => {
-                event.candidate && (isCaller ? offerCandidates : answerCandidates).add(event.candidate.toJSON());
-            };
+            pc.onicecandidate = (e) => e.candidate && (isCaller ? offerCandidates : answerCandidates).add(e.candidate.toJSON());
 
-            // This logic decides if you are starting the call or joining it
             const doc = await callDoc.get();
-            if (!doc.exists || !doc.data().offer) {
-                // You are starting the call
+            const isCaller = !doc.exists || !doc.data().offer;
+
+            if (isCaller) {
                 const offerDescription = await pc.createOffer();
                 await pc.setLocalDescription(offerDescription);
                 await callDoc.set({ offer: { sdp: offerDescription.sdp, type: offerDescription.type } });
-                
-                callDoc.onSnapshot((snapshot) => {
-                    const data = snapshot.data();
-                    if (!pc.currentRemoteDescription && data?.answer) {
-                        pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-                    }
+                callDoc.onSnapshot(s => {
+                    const d = s.data();
+                    if (!pc.currentRemoteDescription && d?.answer) pc.setRemoteDescription(new RTCSessionDescription(d.answer));
                 });
             } else {
-                // They (Grandparents) are joining the call
                 await pc.setRemoteDescription(new RTCSessionDescription(doc.data().offer));
                 const answerDescription = await pc.createAnswer();
                 await pc.setLocalDescription(answerDescription);
@@ -90,8 +117,16 @@
             answerCandidates.onSnapshot(s => s.docChanges().forEach(c => c.type === 'added' && pc.addIceCandidate(new RTCIceCandidate(c.doc.data()))));
         }
 
-        // Start automatically as soon as the page loads
-        window.onload = start;
+        // View Swapping Logic
+        document.getElementById('localVideo').onclick = () => {
+            const local = document.getElementById('localVideo');
+            const remote = document.getElementById('remoteVideo');
+            const tempSrc = local.srcObject;
+            local.srcObject = remote.srcObject;
+            remote.srcObject = tempSrc;
+        };
+
+        startBtn.onclick = initCall;
     </script>
 </body>
 </html>
