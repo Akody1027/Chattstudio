@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Family Support Cam</title>
+    <style>
+        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; text-align: center; }
+        .video-container { display: grid; grid-template-rows: 1fr 1fr; height: 85vh; gap: 5px; padding: 5px; }
+        video { width: 100%; height: 100%; background: #222; border-radius: 10px; object-fit: cover; }
+        .btns { height: 15vh; display: flex; justify-content: center; align-items: center; gap: 20px; }
+        button { padding: 20px 40px; font-size: 1.2rem; border-radius: 50px; border: none; cursor: pointer; }
+        #hangup { background: #ea4335; color: white; }
+    </style>
+</head>
+<body>
+
+    <div class="video-container">
+        <video id="remoteVideo" autoplay playsinline></video>
+        <video id="localVideo" autoplay playsinline muted></video>
+    </div>
+
+    <div class="btns">
+        <button id="hangup" onclick="location.reload()">End Call</button>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+    <script>
+        // CONFIG FROM 1000065100.jpg
+        const firebaseConfig = {
+            apiKey: "AIzaSyAr8LM3SK09J-44-aQHCOT1mC_ma5ALGT0",
+            authDomain: "realcall-dbffb.firebaseapp.com",
+            projectId: "realcall-dbffb",
+            storageBucket: "realcall-dbffb.firebasestorage.app",
+            messagingSenderId: "453538491966",
+            appId: "1:453538491966:web:249f5022bcd1ccf41aab6f"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const pc = new RTCPeerConnection({
+            iceServers: [{ urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] }]
+        });
+
+        // FIXED ROOM NAME - This makes the URL stay the same!
+        const ROOM_ID = "GrandparentsSupportRoom"; 
+
+        async function start() {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            document.getElementById('localVideo').srcObject = stream;
+            stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+            pc.ontrack = (event) => {
+                document.getElementById('remoteVideo').srcObject = event.streams[0];
+            };
+
+            const callDoc = db.collection('calls').doc(ROOM_ID);
+            const offerCandidates = callDoc.collection('offerCandidates');
+            const answerCandidates = callDoc.collection('answerCandidates');
+
+            pc.onicecandidate = (event) => {
+                event.candidate && (isCaller ? offerCandidates : answerCandidates).add(event.candidate.toJSON());
+            };
+
+            // This logic decides if you are starting the call or joining it
+            const doc = await callDoc.get();
+            if (!doc.exists || !doc.data().offer) {
+                // You are starting the call
+                const offerDescription = await pc.createOffer();
+                await pc.setLocalDescription(offerDescription);
+                await callDoc.set({ offer: { sdp: offerDescription.sdp, type: offerDescription.type } });
+                
+                callDoc.onSnapshot((snapshot) => {
+                    const data = snapshot.data();
+                    if (!pc.currentRemoteDescription && data?.answer) {
+                        pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+                    }
+                });
+            } else {
+                // They (Grandparents) are joining the call
+                await pc.setRemoteDescription(new RTCSessionDescription(doc.data().offer));
+                const answerDescription = await pc.createAnswer();
+                await pc.setLocalDescription(answerDescription);
+                await callDoc.update({ answer: { sdp: answerDescription.sdp, type: answerDescription.type } });
+            }
+
+            offerCandidates.onSnapshot(s => s.docChanges().forEach(c => c.type === 'added' && pc.addIceCandidate(new RTCIceCandidate(c.doc.data()))));
+            answerCandidates.onSnapshot(s => s.docChanges().forEach(c => c.type === 'added' && pc.addIceCandidate(new RTCIceCandidate(c.doc.data()))));
+        }
+
+        // Start automatically as soon as the page loads
+        window.onload = start;
+    </script>
+</body>
+</html>
