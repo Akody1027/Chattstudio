@@ -137,8 +137,15 @@
                 await callDoc.update({ answer: { sdp: answerDescription.sdp, type: answerDescription.type } });
             }
 
-            offerCandidates.onSnapshot(s => s.docChanges().forEach(c => c.type === 'added' && pc.addIceCandidate(new RTCIceCandidate(c.doc.data()))));
-            answerCandidates.onSnapshot(s => s.docChanges().forEach(c => c.type === 'added' && pc.addIceCandidate(new RTCIceCandidate(c.doc.data()))));
+            if (isCaller) {
+                answerCandidates.onSnapshot(s => s.docChanges().forEach(c => c.type === 'added' && pc.addIceCandidate(new RTCIceCandidate(c.doc.data()))));
+            } else {
+                offerCandidates.onSnapshot(s => s.docChanges().forEach(c => c.type === 'added' && pc.addIceCandidate(new RTCIceCandidate(c.doc.data()))));
+            }
+
+
+
+            
         }
 
         // View Swapping Logic
