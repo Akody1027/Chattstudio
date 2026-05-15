@@ -8,45 +8,32 @@
         :root { --bg: #121212; --accent: #4285f4; --danger: #ea4335; }
         body { margin: 0; background: var(--bg); color: white; font-family: sans-serif; overflow: hidden; height: 98vh;}
         
-        /* Main Container for Full Screen Video */
         #video-viewport { position: relative; width: 100vw; height: 80vh; background: #000; }
         
-        /* The Remote Video (The person you are helping) - Large View */
-        #remoteVideo { width: 100%; height: 100%; object-fit: cover; }
+        /* View States for Image/Video Toggling */
+        .large-view { width: 100%; height: 100%; object-fit: cover; position: relative; z-index: 1; border: none; border-radius: 0; }
+        .small-view { position: absolute; bottom: 20px; right: 20px; width: 120px; height: 160px; background: #222; border: 2px solid white; border-radius: 12px; object-fit: cover; z-index: 10; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
         
-        /* The Local Video (You) - Small Picture-in-Picture */
-        #localVideo { 
-            position: absolute; bottom: 20px; right: 20px; 
-            width: 120px; height: 160px; 
-            background: #222; border: 2px solid white; border-radius: 12px; 
-            object-fit: cover; z-index: 10; cursor: pointer;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-        }
-
-        .controls { 
-            height: 15vh; display: flex; justify-content: center; 
-            align-items: center; gap: 20px; background: #1a1a1a; 
-        }
-
-        button { 
-            padding: 18px 35px; font-size: 1rem; font-weight: bold; 
-            border-radius: 50px; border: none; cursor: pointer; 
-        }
+        .controls { height: 15vh; display: flex; justify-content: center; align-items: center; gap: 20px; background: #1a1a1a; }
+        button { padding: 18px 35px; font-size: 1rem; font-weight: bold; border-radius: 50px; border: none; cursor: pointer; }
         #startBtn { background: var(--accent); color: white; }
         #hangup { background: var(--danger); color: white; display: none; }
+        
+        /* Hidden canvas used only for image extraction */
+        #captureCanvas { display: none; }
     </style>
 </head>
 <body>
 
     <div id="video-viewport">
-        <video id="remoteVideo" autoplay playsinline></video>
-        <video id="localVideo" autoplay playsinline muted title="Click to swap views"></video>
+        <img id="remoteFeed" class="large-view" alt="Waiting for connection..." />
+        <video id="localFeed" class="small-view" autoplay playsinline muted></video>
+        <canvas id="captureCanvas"></canvas>
     </div>
 
     <div class="controls">
         <button id="startBtn">Start Call</button>
         <button id="hangup">End Call</button>
-
     </div>
 
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -67,51 +54,54 @@
         const ROOM_ID = "WifeTestRoom"; 
 
         let pc;
+        let dataChannel;
+        let frameInterval;
 
         const startBtn = document.getElementById('startBtn');
         const hangupBtn = document.getElementById('hangup');
+        const remoteFeed = document.getElementById('remoteFeed');
+        const localFeed = document.getElementById('localFeed');
+        const captureCanvas = document.getElementById('captureCanvas');
+        const context = captureCanvas.getContext('2d');
 
         async function initCall() {
             startBtn.style.display = 'none';
             hangupBtn.style.display = 'block';
 
-                        pc = new RTCPeerConnection({
+            pc = new RTCPeerConnection({
                 iceServers: [
                     { urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] },
-                    {
-                        urls: "turn:openrelay.metered.ca:443",
-                        username: "openrelayproject",
-                        credential: "openrelayproject"
-                    }
+                    { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" }
                 ]
             });
 
-
             const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { width: 640, height: 480, frameRate: 15 }, 
+                video: { width: 480, height: 640, frameRate: 15 }, 
                 audio: true 
             });
             
-            document.getElementById('localVideo').srcObject = stream;
-            stream.getTracks().forEach(track => pc.addTrack(track, stream));
-
-            pc.ontrack = (event) => {
-                document.getElementById('remoteVideo').srcObject = event.streams[0];
-            };
+            localFeed.srcObject = stream;
+            
+            // Only add the audio track to the WebRTC connection
+            stream.getAudioTracks().forEach(track => pc.addTrack(track, stream));
 
             const callDoc = db.collection('calls').doc(ROOM_ID);
             const offerCandidates = callDoc.collection('offerCandidates');
             const answerCandidates = callDoc.collection('answerCandidates');
 
-
-
-
-
-
-
-
             const doc = await callDoc.get();
             const isCaller = !doc.exists || !doc.data().offer;
+
+            // Configure the direct P2P data tunnel
+            if (isCaller) {
+                dataChannel = pc.createDataChannel('frameChannel');
+                setupDataChannel();
+            } else {
+                pc.ondatachannel = (event) => {
+                    dataChannel = event.channel;
+                    setupDataChannel();
+                };
+            }
 
             pc.onicecandidate = (event) => {
                 if (event.candidate) {
@@ -120,10 +110,8 @@
                 }
             };
 
-
-
-
-                        if (isCaller) {
+            // Sequential Handshake
+            if (isCaller) {
                 const offerDescription = await pc.createOffer();
                 await pc.setLocalDescription(offerDescription);
                 await callDoc.set({ offer: { sdp: offerDescription.sdp, type: offerDescription.type } });
@@ -143,27 +131,49 @@
                 
                 offerCandidates.onSnapshot(offSnap => offSnap.docChanges().forEach(c => c.type === 'added' && pc.addIceCandidate(new RTCIceCandidate(c.doc.data()))));
             }
-
-
-
-
-            
         }
 
-        // View Swapping Logic
-        document.getElementById('localVideo').onclick = () => {
-            const local = document.getElementById('localVideo');
-            const remote = document.getElementById('remoteVideo');
-            const tempSrc = local.srcObject;
-            local.srcObject = remote.srcObject;
-            remote.srcObject = tempSrc;
-
-        };
-
+        function setupDataChannel() {
+            dataChannel.onmessage = (event) => {
+                remoteFeed.src = event.data;
+            };
             
-                    hangupBtn.onclick = async () => {
-            const tracks = document.getElementById('localVideo').srcObject?.getTracks();
+            dataChannel.onopen = () => {
+                // Take a silent screenshot every 500ms and fire it down the tunnel
+                frameInterval = setInterval(() => {
+                    if (dataChannel.readyState === 'open' && localFeed.videoWidth) {
+                        captureCanvas.width = localFeed.videoWidth;
+                        captureCanvas.height = localFeed.videoHeight;
+                        context.drawImage(localFeed, 0, 0, captureCanvas.width, captureCanvas.height);
+                        
+                        // Compress JPEG to 30% quality to ensure rapid transfer on 4G
+                        dataChannel.send(captureCanvas.toDataURL('image/jpeg', 0.3));
+                    }
+                }, 500); 
+            };
+        }
+
+        // CSS-based View Swapping Logic
+        let isLocalSmall = true;
+        function toggleViews() {
+            if (isLocalSmall) {
+                localFeed.className = 'large-view';
+                remoteFeed.className = 'small-view';
+            } else {
+                localFeed.className = 'small-view';
+                remoteFeed.className = 'large-view';
+            }
+            isLocalSmall = !isLocalSmall;
+        }
+
+        localFeed.onclick = toggleViews;
+        remoteFeed.onclick = toggleViews;
+
+        hangupBtn.onclick = async () => {
+            clearInterval(frameInterval);
+            const tracks = localFeed.srcObject?.getTracks();
             if (tracks) tracks.forEach(track => track.stop());
+            if (dataChannel) dataChannel.close();
             if (pc) pc.close();
 
             const callDoc = db.collection('calls').doc(ROOM_ID);
@@ -175,9 +185,6 @@
             
             location.reload();
         };
-
-            
-        
 
         startBtn.onclick = initCall;
     </script>
