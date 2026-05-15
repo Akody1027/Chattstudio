@@ -157,6 +157,10 @@
             const tempSrc = local.srcObject;
             local.srcObject = remote.srcObject;
             remote.srcObject = tempSrc;
+
+        };
+
+            
                     hangupBtn.onclick = async () => {
             const tracks = document.getElementById('localVideo').srcObject?.getTracks();
             if (tracks) tracks.forEach(track => track.stop());
@@ -173,7 +177,7 @@
         };
 
             
-        };
+        
 
         startBtn.onclick = initCall;
     </script>
