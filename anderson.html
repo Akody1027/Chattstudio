@@ -123,27 +123,27 @@
 
 
 
-            
-            if (isCaller) {
+                        if (isCaller) {
                 const offerDescription = await pc.createOffer();
                 await pc.setLocalDescription(offerDescription);
                 await callDoc.set({ offer: { sdp: offerDescription.sdp, type: offerDescription.type } });
-                callDoc.onSnapshot(s => {
+                
+                callDoc.onSnapshot(async s => {
                     const d = s.data();
-                    if (!pc.currentRemoteDescription && d?.answer) pc.setRemoteDescription(new RTCSessionDescription(d.answer));
+                    if (!pc.currentRemoteDescription && d?.answer) {
+                        await pc.setRemoteDescription(new RTCSessionDescription(d.answer));
+                        answerCandidates.onSnapshot(ansSnap => ansSnap.docChanges().forEach(c => c.type === 'added' && pc.addIceCandidate(new RTCIceCandidate(c.doc.data()))));
+                    }
                 });
             } else {
                 await pc.setRemoteDescription(new RTCSessionDescription(doc.data().offer));
                 const answerDescription = await pc.createAnswer();
                 await pc.setLocalDescription(answerDescription);
                 await callDoc.update({ answer: { sdp: answerDescription.sdp, type: answerDescription.type } });
+                
+                offerCandidates.onSnapshot(offSnap => offSnap.docChanges().forEach(c => c.type === 'added' && pc.addIceCandidate(new RTCIceCandidate(c.doc.data()))));
             }
 
-            if (isCaller) {
-                answerCandidates.onSnapshot(s => s.docChanges().forEach(c => c.type === 'added' && pc.addIceCandidate(new RTCIceCandidate(c.doc.data()))));
-            } else {
-                offerCandidates.onSnapshot(s => s.docChanges().forEach(c => c.type === 'added' && pc.addIceCandidate(new RTCIceCandidate(c.doc.data()))));
-            }
 
 
 
