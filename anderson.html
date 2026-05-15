@@ -45,7 +45,8 @@
 
     <div class="controls">
         <button id="startBtn">Start Call</button>
-        <button id="hangup" onclick="location.reload()">End Call</button>
+        <button id="hangup">End Call</button>
+
     </div>
 
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -63,7 +64,8 @@
 
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
-        const ROOM_ID = "GrandparentsSupportRoom"; 
+        const ROOM_ID = "WifeTestRoom"; 
+
         let pc;
 
         const startBtn = document.getElementById('startBtn');
@@ -155,6 +157,22 @@
             const tempSrc = local.srcObject;
             local.srcObject = remote.srcObject;
             remote.srcObject = tempSrc;
+                    hangupBtn.onclick = async () => {
+            const tracks = document.getElementById('localVideo').srcObject?.getTracks();
+            if (tracks) tracks.forEach(track => track.stop());
+            if (pc) pc.close();
+
+            const callDoc = db.collection('calls').doc(ROOM_ID);
+            const offerDocs = await callDoc.collection('offerCandidates').get();
+            offerDocs.forEach(doc => doc.ref.delete());
+            const answerDocs = await callDoc.collection('answerCandidates').get();
+            answerDocs.forEach(doc => doc.ref.delete());
+            await callDoc.delete();
+            
+            location.reload();
+        };
+
+            
         };
 
         startBtn.onclick = initCall;
