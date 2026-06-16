@@ -1290,206 +1290,163 @@
         
 
         // --- CHAT LOGIC ---
+      
+      
+      
+      
+      
 
-        window.openThread = async (threadId, chatName) => {
+     
+             
 
+              window.openThread = async (threadId, chatName) => {
             currentChatId = threadId;
-
             
-
             inboxView.style.display = 'none';
-
             chatView.style.display = 'flex';
-
             
-
             headerTitle.textContent = chatName;
-
             backBtn.classList.remove('hidden');
-
             inboxActions.style.display = 'none'; // Hide right icons
-
             chatActions.classList.remove('hidden');
-
             
-
             blockedNotice.style.display = 'none';
-
             inputArea.style.display = 'block';
-
             blockBtn.textContent = "Block";
-
             blockBtn.disabled = false;
 
-
+            // --- NEW: DYNAMIC PROFILE PICTURE (THEIR PIC) ---
+            const profileImg = document.getElementById('header-profile-img');
+            const picInput = document.getElementById('profile-pic-input');
+            const picBtn = document.querySelector('.profile-pic-btn');
+            
+            profileImg.src = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23555'><path d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/></svg>";
+            picInput.disabled = true; 
+            picBtn.style.cursor = 'default';
+            
+            const otherUserId = chatName.split(',')[0].trim().toLowerCase().replace(/\s+/g, '-');
+            getDoc(doc(db, "users", otherUserId)).then(snap => {
+                if (snap.exists() && snap.data().profilePicUrl) {
+                    profileImg.src = snap.data().profilePicUrl;
+                }
+            }).catch(e => console.error(e));
+            // ------------------------------------------------
 
             const threadRef = doc(db, "threads", threadId);
-
             updateDoc(threadRef, { [`unreadCounts.${currentUser.name}`]: 0 });
 
-
-
             const msgsRef = collection(db, "threads", threadId, "messages");
-
             const q = query(msgsRef, orderBy("timestamp", "asc"));
 
-
-
             if (unsubscribeMessages) unsubscribeMessages();         
-
-                        // Track initial load so we don't play sound for history
-
+            // Track initial load so we don't play sound for history
             let isFirstLoad = true;
 
-
-
             unsubscribeMessages = onSnapshot(q, (snapshot) => {
-
                 // 1. Handle Sound for NEW messages
-
                 if (!isFirstLoad) {
-
                     snapshot.docChanges().forEach((change) => {
-
                         if (change.type === "added") {
-
                             const newMsg = change.doc.data();
-
                             // Only play if it's NOT me
-
                             if (newMsg.sender !== currentUser.name) {
-
                                 document.getElementById('notif-sound').play().catch(() => {});
-
                             }
-
                         }
-
                     });
-
                 }
-
-
 
                 // 2. Render Messages
-
                 const prompt = emptyStatePrompt;
-
                 messagesList.innerHTML = ''; 
-
                 messagesList.appendChild(prompt); 
 
-
-
                 if (snapshot.empty) {
-
                     prompt.style.display = 'flex';
-
                 } else {
-
                     prompt.style.display = 'none';
-
                     snapshot.forEach(doc => renderMessage(doc.data()));
-
                     scrollToBottom();
-
                 }
-
-
 
                 // Mark first load as complete
-
                 isFirstLoad = false;
-
             });
-
-
 
             if (unsubscribeThreadMeta) unsubscribeThreadMeta();
-
             unsubscribeThreadMeta = onSnapshot(threadRef, (docSnap) => {
-
                 if (!docSnap.exists()) {
-
                     alert("Thread was deleted.");
-
                     backToInbox();
-
                     return;
-
                 }
-
                 const data = docSnap.data();
 
-
-
                 if (data.blockedBy) {
-
                     blockedNotice.style.display = 'block';
-
                     inputArea.style.display = 'none';
-
                     if (data.blockedBy === currentUser.id) {
-
                         blockedNotice.textContent = "You blocked this chat.";
-
                         blockBtn.textContent = "Unblock";
-
                     } else {
-
                         blockedNotice.textContent = "You have been blocked.";
-
                         blockBtn.disabled = true;
-
                     }
-
                 } else {
-
                     blockedNotice.style.display = 'none';
-
                     inputArea.style.display = 'block';
-
                     blockBtn.textContent = "Block";
-
                 }
-
             });
-
         };
-
-
 
         backBtn.addEventListener('click', backToInbox);
 
-
-
         function backToInbox() {
-
             currentChatId = null;
-
             if (unsubscribeMessages) unsubscribeMessages();
-
             if (unsubscribeThreadMeta) unsubscribeThreadMeta();
 
-
-
             chatView.style.display = 'none';
-
             inboxView.style.display = 'flex';
-
             
-
             headerTitle.textContent = "My Inbox";
-
             backBtn.classList.add('hidden');
-
             inboxActions.style.display = 'flex';
-
             chatActions.classList.add('hidden');
 
+            // --- NEW: RESTORE MY PROFILE PICTURE ---
+            const profileImg = document.getElementById('header-profile-img');
+            const picInput = document.getElementById('profile-pic-input');
+            const picBtn = document.querySelector('.profile-pic-btn');
+            
+            if (currentUser && currentUser.profilePicUrl) {
+                profileImg.src = currentUser.profilePicUrl;
+            } else {
+                profileImg.src = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23555'><path d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/></svg>";
+            }
+            picInput.disabled = false; 
+            picBtn.style.cursor = 'pointer';
+            // ----------------------------------------
         }
 
-
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
 
         function renderMessage(msg) {
 
