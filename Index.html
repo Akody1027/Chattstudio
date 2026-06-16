@@ -1018,36 +1018,53 @@
                         document.getElementById('notif-sound').play().catch(() => {});
 
                     }
-
-
-
-                    const item = document.createElement('div');
-
+                  
+                  
+                  
+                  
+                                      const item = document.createElement('div');
                     item.className = 'thread-item';
-
+                    const avatarId = `avatar-${threadId}`;
                     item.innerHTML = `
-
                         <input type="checkbox" class="select-checkbox ${isSelectMode ? 'block' : ''}" data-id="${threadId}" data-participants="${otherParticipants.join(',')}">
-
-                        <div class="avatar-circle">${initials}</div>
-
-                        <div class="thread-info">
-
-                            <div class="thread-name">${chatName}</div>
-
-                            <div class="thread-preview" style="${unreadCount > 0 ? 'font-weight:bold; color:black;' : ''}">
-
-                                ${data.lastMessage || 'Start conversation'}
-
-                            </div>
-
+                        <div class="avatar-circle" style="overflow: hidden;">
+                            <img id="${avatarId}" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23555'><path d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/></svg>" style="width: 100%; height: 100%; object-fit: cover;" />
                         </div>
-
+                        <div class="thread-info">
+                            <div class="thread-name">${chatName}</div>
+                            <div class="thread-preview" style="${unreadCount > 0 ? 'font-weight:bold; color:black;' : ''}">
+                                ${data.lastMessage || 'Start conversation'}
+                            </div>
+                        </div>
                         ${unreadCount > 0 ? `<div class="badge">${unreadCount}</div>` : ''}
-
                     `;
 
+                    if (otherParticipants.length > 0) {
+                        const targetId = otherParticipants[0].toLowerCase().replace(/\s+/g, '-');
+                        getDoc(doc(db, "users", targetId)).then(snap => {
+                            if (snap.exists() && snap.data().profilePicUrl) {
+                                const imgEl = document.getElementById(avatarId);
+                                if (imgEl) imgEl.src = snap.data().profilePicUrl;
+                            }
+                        }).catch(e => console.error(e));
+                    }
 
+                  
+                  
+                  
+
+
+
+
+                  
+                  
+                  
+                  
+                  
+                  
+                  
+                  
+                  
 
                     const checkbox = item.querySelector('.select-checkbox');
 
