@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Platform Admin Dashboard</title>
+    <style>
+        :root {
+            --bg-color: #f4f7f6;
+            --surface: #ffffff;
+            --primary: #0084ff;
+            --danger: #ff3b30;
+            --text-dark: #1a1a1a;
+            --text-muted: #666666;
+            --border: #e0e0e0;
+            --radius: 12px;
+            --shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-dark);
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 1rem;
+        }
+        header h1 { color: var(--primary); font-size: 2rem; margin-bottom: 0.5rem; }
+        header p { color: var(--text-muted); font-size: 0.9rem; }
+
+        .header-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .stat-card {
+            background: var(--surface);
+            padding: 1.5rem;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            text-align: center;
+        }
+        .stat-card h3 { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-card .value { font-size: 2.5rem; font-weight: bold; color: var(--text-dark); }
+
+        .section-divider {
+            border: 0;
+            height: 2px;
+            background: var(--border);
+            margin: 1rem 0;
+        }
+
+        .section-container {
+            background: var(--surface);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .section-header { font-size: 1.25rem; margin-bottom: 1rem; color: var(--primary); font-weight: 600; }
+        
+        .scrollable-content {
+            max-height: 450px;
+            overflow-y: auto;
+            padding-right: 10px;
+        }
+        
+        /* Custom Scrollbar */
+        .scrollable-content::-webkit-scrollbar { width: 6px; }
+        .scrollable-content::-webkit-scrollbar-track { background: transparent; }
+        .scrollable-content::-webkit-scrollbar-thumb { background: #ccc; border-radius: 10px; }
+
+        /* --- Global Buttons --- */
+        .btn-danger { background: var(--danger); color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.9rem; font-weight: 500; transition: background 0.2s; }
+        .btn-danger:hover { background: #d32f2f; }
+
+        /* --- Users --- */
+        .user-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .user-row:last-child { border-bottom: none; }
+        .user-info { display: flex; flex-direction: column; gap: 4px; }
+        .user-name { font-weight: bold; font-size: 1.1rem; }
+        .user-id { font-size: 0.8rem; color: var(--text-muted); }
+
+        /* --- Conversations --- */
+        .thread-card {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            overflow: hidden;
+        }
+        .thread-header {
+            padding: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #fafbfc;
+            transition: background 0.2s;
+        }
+        .thread-header:hover { background: #f0f2f5; }
+        .thread-info-block { flex: 1; cursor: pointer; }
+        .thread-participants { font-weight: 600; font-size: 1.05rem; }
+        .thread-meta { font-size: 0.85rem; color: var(--text-muted); }
+        
+        .thread-body {
+            border-top: 1px solid var(--border);
+            padding: 1.25rem;
+            background: #ffffff;
+            max-height: 400px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .hidden-body { display: none; }
+
+        .msg-bubble {
+            background: #f0f2f5;
+            padding: 10px 14px;
+            border-radius: 16px;
+            border-bottom-left-radius: 4px;
+            max-width: 85%;
+            align-self: flex-start;
+            display: flex;
+            flex-direction: column;
+        }
+        .msg-sender { font-weight: 700; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px; }
+        .msg-text { font-size: 0.95rem; line-height: 1.4; color: #1a1a1a; word-wrap: break-word; }
+        .msg-media-tag { font-size: 0.75rem; background: #e0e0e0; padding: 3px 6px; border-radius: 4px; margin-top: 6px; display: inline-block; width: fit-content; color: #555;}
+
+        /* --- Media Gallery --- */
+        .media-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 1rem;
+        }
+        .media-item {
+            width: 100%;
+            aspect-ratio: 1;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #e0e0e0;
+            position: relative;
+        }
+        .media-item img, .media-item video {
+            width: 100%; height: 100%; object-fit: cover; cursor: pointer;
+        }
+        .media-sender {
+            position: absolute; bottom: 0; left: 0; right: 0;
+            background: rgba(0,0,0,0.7); color: white;
+            font-size: 0.7rem; padding: 4px 6px;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none;
+        }
+        .delete-media-btn {
+            position: absolute; top: 6px; right: 6px;
+            background: rgba(255, 59, 48, 0.9); color: white;
+            border: none; border-radius: 50%;
+            width: 24px; height: 24px; font-size: 14px; font-weight: bold;
+            cursor: pointer; display: flex; justify-content: center; align-items: center;
+            z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .delete-media-btn:hover { background: #d32f2f; }
+
+        #loading-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.9); z-index: 1000;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 1.2rem; font-weight: bold; color: var(--primary);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loading-overlay">Syncing Database...</div>
+
+    <header>
+        <h1>Admin Panel</h1>
+        <p>ChattStudio Overseer</p>
+    </header>
+
+    <div class="header-stats">
+        <div class="stat-card">
+            <h3>Total Users</h3>
+            <div class="value" id="stat-users">-</div>
+        </div>
+        <div class="stat-card">
+            <h3>Total Threads</h3>
+            <div class="value" id="stat-threads">-</div>
+        </div>
+        <div class="stat-card">
+            <h3>Media Files</h3>
+            <div class="value" id="stat-media">-</div>
+        </div>
+    </div>
+
+    <hr class="section-divider">
+
+    <div class="section-container">
+        <h2 class="section-header">User Management</h2>
+        <div class="scrollable-content" id="users-container">
+            </div>
+    </div>
+
+    <hr class="section-divider">
+
+    <div class="section-container">
+        <h2 class="section-header">All Conversations</h2>
+        <div class="scrollable-content" id="threads-container">
+            </div>
+    </div>
+
+    <hr class="section-divider">
+
+    <div class="section-container">
+        <h2 class="section-header">Global Media Library</h2>
+        <div class="scrollable-content">
+            <div id="media-grid" class="media-grid">
+                </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-app.js";
+        import { getFirestore, collection, getDocs, query, orderBy, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBsIfcS2kY29alWNQBqaLwQ9To4LwlcRD8",
+            authDomain: "myinbox-f9937.firebaseapp.com",
+            projectId: "myinbox-f9937",
+            storageBucket: "myinbox-f9937.firebasestorage.app",
+            messagingSenderId: "906002940697",
+            appId: "1:906002940697:web:6bea44f2927a6a8df23b88",
+            measurementId: "G-VKN6E7XTF8"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // UI Elements
+        const statUsers = document.getElementById('stat-users');
+        const statThreads = document.getElementById('stat-threads');
+        const statMedia = document.getElementById('stat-media');
+        const usersContainer = document.getElementById('users-container');
+        const threadsContainer = document.getElementById('threads-container');
+        const mediaGrid = document.getElementById('media-grid');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        
+        let globalMediaCount = 0;
+
+        async function initDashboard() {
+            try {
+                // 1. Fetch Users
+                const usersSnap = await getDocs(collection(db, "users"));
+                statUsers.textContent = usersSnap.size;
+                
+                usersContainer.innerHTML = '';
+                usersSnap.forEach(userDoc => {
+                    const userData = userDoc.data();
+                    const userId = userDoc.id;
+                    
+                    const row = document.createElement('div');
+                    row.className = 'user-row';
+                    row.innerHTML = `
+                        <div class="user-info">
+                            <span class="user-name">${userData.name || 'Unknown User'}</span>
+                            <span class="user-id">ID: ${userId} | PIN: ${userData.pin || 'N/A'}</span>
+                        </div>
+                        <button class="btn-danger delete-user-btn" data-id="${userId}">Delete</button>
+                    `;
+                    usersContainer.appendChild(row);
+                });
+
+                // Attach User Delete Listeners
+                document.querySelectorAll('.delete-user-btn').forEach(btn => {
+                    btn.addEventListener('click', async (e) => {
+                        const uid = e.target.getAttribute('data-id');
+                        if(confirm('Permanently delete this user? This revokes their login access immediately.')) {
+                            try {
+                                await deleteDoc(doc(db, "users", uid));
+                                e.target.closest('.user-row').remove();
+                                statUsers.textContent = parseInt(statUsers.textContent) - 1;
+                            } catch(err) {
+                                alert("Error deleting user. Check permissions.");
+                                console.error(err);
+                            }
+                        }
+                    });
+                });
+
+                // 2. Fetch Threads
+                const threadsSnap = await getDocs(collection(db, "threads"));
+                statThreads.textContent = threadsSnap.size;
+
+                threadsContainer.innerHTML = '';
+                mediaGrid.innerHTML = '';
+
+                // Iterate all threads
+                for (const threadDoc of threadsSnap.docs) {
+                    const threadData = threadDoc.data();
+                    const threadId = threadDoc.id;
+                    const participants = threadData.participants ? threadData.participants.join(" & ") : "Unknown";
+                    
+                    // Build Thread Card
+                    const card = document.createElement('div');
+                    card.className = 'thread-card';
+                    card.innerHTML = `
+                        <div class="thread-header">
+                            <div class="thread-info-block" onclick="this.parentElement.nextElementSibling.classList.toggle('hidden-body')">
+                                <div class="thread-participants">${participants}</div>
+                                <div class="thread-meta">ID: ${threadId.substring(0,6)}... ▼</div>
+                            </div>
+                            <button class="btn-danger delete-thread-btn" data-id="${threadId}">Delete Chat</button>
+                        </div>
+                        <div class="thread-body hidden-body" id="body-${threadId}">
+                            <div style="color: #888; font-size: 0.9rem;">Loading messages...</div>
+                        </div>
+                    `;
+                    threadsContainer.appendChild(card);
+
+                    // Fetch Messages for this thread
+                    fetchMessages(threadId, participants);
+                }
+
+                // Attach Thread Delete Listeners
+                document.querySelectorAll('.delete-thread-btn').forEach(btn => {
+                    btn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        const tid = e.target.getAttribute('data-id');
+                        if(confirm('Permanently delete this entire conversation and ALL its messages for everyone?')) {
+                            try {
+                                // Delete subcollection messages first to prevent ghost data
+                                const msgsSnap = await getDocs(collection(db, "threads", tid, "messages"));
+                                const deletePromises = msgsSnap.docs.map(mDoc => deleteDoc(doc(db, "threads", tid, "messages", mDoc.id)));
+                                await Promise.all(deletePromises);
+                                
+                                // Delete parent thread
+                                await deleteDoc(doc(db, "threads", tid));
+                                e.target.closest('.thread-card').remove();
+                                statThreads.textContent = parseInt(statThreads.textContent) - 1;
+                                
+                                // Refresh page to accurately clean up media grid
+                                setTimeout(() => window.location.reload(), 500);
+                            } catch(err) {
+                                alert("Error deleting conversation.");
+                                console.error(err);
+                            }
+                        }
+                    });
+                });
+
+                loadingOverlay.style.display = 'none';
+
+            } catch (err) {
+                console.error("Dashboard Init Error:", err);
+                loadingOverlay.textContent = "Error loading data. Check console.";
+            }
+        }
+
+        async function fetchMessages(threadId, participants) {
+            const bodyContainer = document.getElementById(`body-${threadId}`);
+            
+            try {
+                const msgQuery = query(collection(db, "threads", threadId, "messages"), orderBy("timestamp", "asc"));
+                const msgSnap = await getDocs(msgQuery);
+                
+                if (msgSnap.empty) {
+                    bodyContainer.innerHTML = `<div style="color: #aaa; font-style: italic; font-size: 0.9rem;">No messages in this thread.</div>`;
+                    return;
+                }
+
+                bodyContainer.innerHTML = '';
+
+                msgSnap.forEach(msgDoc => {
+                    const msg = msgDoc.data();
+                    msg.id = msgDoc.id; // Inject ID for targeted deletion
+                    
+                    const bubble = document.createElement('div');
+                    bubble.className = 'msg-bubble';
+                    bubble.id = `msg-${msg.id}`; // Bind ID to DOM element
+                    
+                    let contentStr = msg.text ? `<div class="msg-text">${msg.text}</div>` : '';
+                    if (msg.mediaUrl) {
+                        contentStr += `<div class="msg-media-tag">[Attached Media]</div>`;
+                        extractAndRenderMedia(msg, threadId);
+                    }
+                    
+                    bubble.innerHTML = `
+                        <div class="msg-sender">${msg.sender}</div>
+                        ${contentStr}
+                    `;
+                    bodyContainer.appendChild(bubble);
+                });
+
+            } catch (err) {
+                bodyContainer.innerHTML = `<div style="color: red; font-size: 0.9rem;">Failed to load messages.</div>`;
+                console.error(err);
+            }
+        }
+
+        function extractAndRenderMedia(msg, threadId) {
+            globalMediaCount++;
+            statMedia.textContent = globalMediaCount;
+
+            const item = document.createElement('div');
+            item.className = 'media-item';
+            
+            // Build visual component
+            let mediaHTML = '';
+            if (msg.mediaType && msg.mediaType.startsWith('video')) {
+                mediaHTML = `
+                    <video src="${msg.mediaUrl}" muted loop onmouseover="this.play()" onmouseout="this.pause()" onclick="window.open('${msg.mediaUrl}', '_blank')"></video>
+                `;
+            } else {
+                mediaHTML = `
+                    <img src="${msg.mediaUrl}" alt="media" loading="lazy" onclick="window.open('${msg.mediaUrl}', '_blank')" />
+                `;
+            }
+            
+            // Assemble container
+            item.innerHTML = `
+                ${mediaHTML}
+                <div class="media-sender">${msg.sender}</div>
+            `;
+
+            // Create contextual Delete button
+            const delBtn = document.createElement('button');
+            delBtn.className = 'delete-media-btn';
+            delBtn.innerHTML = '×';
+            delBtn.title = 'Delete Media Message';
+            delBtn.onclick = async (e) => {
+                e.stopPropagation();
+                if(confirm('Delete this media message from the database?')) {
+                    try {
+                        await deleteDoc(doc(db, "threads", threadId, "messages", msg.id));
+                        item.remove();
+                        statMedia.textContent = parseInt(statMedia.textContent) - 1;
+                        
+                        // Remove from the corresponding conversation view if expanded
+                        const targetBubble = document.getElementById(`msg-${msg.id}`);
+                        if (targetBubble) targetBubble.remove();
+                    } catch(err) {
+                        alert("Error deleting media message.");
+                        console.error(err);
+                    }
+                }
+            };
+
+            item.appendChild(delBtn);
+            mediaGrid.appendChild(item);
+        }
+
+        // Boot
+        initDashboard();
+
+    </script>
+</body>
+</html>
