@@ -621,6 +621,17 @@
 
 
 
+
+
+
+            <video id="live-record-preview" class="hidden" autoplay muted playsinline></video>
+            
+
+
+
+
+            
+
             <div id="input-area">
 
                 <div id="sandbox-preview">
@@ -1846,6 +1857,9 @@
                 
                 liveRecordPreview.srcObject = stream;
                 liveRecordPreview.classList.remove('hidden');
+
+                liveRecordPreview.play().catch(e => console.warn("Preview play failed:", e));
+
                 
                 const recorder = new MediaRecorder(stream);
                 const chunks = [];
